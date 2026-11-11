@@ -1,0 +1,71 @@
+[build-system]
+requires = ["hatchling>=1.27,<1.32"]
+build-backend = "hatchling.build"
+
+[project]
+name = "galerkin-least-squares-flow"
+version = "0.1.0"
+description = "Galerkin-supervised local flows fitted by polynomial least squares"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0 AND BSD-3-Clause"
+license-files = ["LICENSE", "LICENSE-GNS"]
+authors = [{ name = "Carlos Andrés Murillo" }]
+keywords = [
+  "Galerkin",
+  "least squares",
+  "reduced-order models",
+  "ordinary differential equations",
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: BSD License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: Mathematics",
+]
+dependencies = [
+  "torch>=2.4,<3",
+  "numerical-galerkin-field @ git+https://github.com/cmurillos/Numerical-Galerkin-Field.git@116532651d7e4801a424834af80a6597e1dd73aa",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<10", "ruff>=0.9,<1", "build>=1.2,<2"]
+
+[project.urls]
+Homepage = "https://github.com/cmurillos/Galerkin-Least-Squares-Flow"
+Source = "https://github.com/cmurillos/Galerkin-Least-Squares-Flow"
+Issues = "https://github.com/cmurillos/Galerkin-Least-Squares-Flow/issues"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/galerkin_least_squares_flow"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "/src",
+  "/tests",
+  "/examples",
+  "/AGENTS.md",
+  "/README.md",
+  "/LICENSE",
+  "/LICENSE-GNS",
+  "/pyproject.toml",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+markers = ["cuda: requires a CUDA-capable PyTorch installation"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]
