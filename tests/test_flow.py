@@ -2,11 +2,12 @@ from math import sqrt
 
 import pytest
 import torch
-from ngfield import GalerkinField
+from ngfield import DomainExitError, GalerkinField, integrate_field
+from ngfield.evolution import _autodiff_taylor_jets
 
 from galerkin_least_squares_flow import Geometry, Space, System
 from galerkin_least_squares_flow._polynomials import _BallPolynomials
-from galerkin_least_squares_flow.flow import _least_squares
+from galerkin_least_squares_flow.flow import _least_squares, _PolynomialField
 
 
 def test_quadratic_features_are_orthonormal_on_the_disk():
@@ -28,6 +29,54 @@ def test_blockwise_least_squares_matches_one_dense_fit():
     fitted = _least_squares(zip(features.split(5), targets.split(5)))
     expected = torch.linalg.lstsq(features, targets, driver="gelsd").solution
     torch.testing.assert_close(fitted, expected, atol=1e-12, rtol=1e-12)
+
+
+def test_blockwise_fit_rejects_a_rank_deficient_design():
+    features = torch.ones(12, 3, dtype=torch.float64)
+    with pytest.raises(ValueError, match="rank deficient"):
+        _least_squares([(features, features[:, :1])])
+
+
+def test_large_cpu_blocks_preserve_the_dense_least_squares_solution():
+    generator = torch.Generator().manual_seed(71)
+    features = torch.randn(645, 512, generator=generator, dtype=torch.float64)
+    targets = torch.randn(645, 4, generator=generator, dtype=torch.float64)
+    fitted = _least_squares(zip(features.split(520), targets.split(520)))
+    expected = torch.linalg.lstsq(features, targets, driver="gelsd").solution
+    torch.testing.assert_close(fitted, expected, atol=2e-12, rtol=2e-12)
+
+
+@pytest.mark.parametrize("degree", [1, 2])
+def test_monomial_velocity_and_taylor_jets_match_original_field(degree):
+    generator = torch.Generator().manual_seed(27)
+    features = _BallPolynomials(3, degree, device="cpu", dtype=torch.float64)
+    coefficients = torch.randn(features.size, 3, dtype=torch.float64, generator=generator)
+    field = _PolynomialField(features, coefficients, radius=1.7)
+    states = torch.randn(2, 2, 3, dtype=torch.float64, generator=generator) * 0.12
+    states.requires_grad_()
+
+    def original(z):
+        return field.radius * (features(z / field.radius) @ coefficients)
+
+    torch.testing.assert_close(field(states), original(states))
+    actual = tuple(field._taylor_jets(states, 5))
+    expected = tuple(_autodiff_taylor_jets(original, states, 5))
+    for computed, reference in zip(actual, expected, strict=True):
+        torch.testing.assert_close(computed, reference, atol=2e-10, rtol=2e-12)
+    actual_grad = torch.autograd.grad(actual[-1].sum(), states)[0]
+    expected_grad = torch.autograd.grad(expected[-1].sum(), states)[0]
+    torch.testing.assert_close(actual_grad, expected_grad)
+
+
+def test_specialized_taylor_path_preserves_boundary_contact():
+    features = _BallPolynomials(1, 1, device="cpu", dtype=torch.float64)
+    field = _PolynomialField(features, torch.tensor([[1.0], [0.0]], dtype=torch.float64), 1.0)
+    initial = torch.tensor([0.9], dtype=torch.float64)
+    times = torch.tensor([0.0, 0.05, 0.2], dtype=torch.float64)
+    with pytest.raises(DomainExitError) as caught:
+        integrate_field(field, initial, times, step=0.2, radius=field.radius)
+    assert caught.value.exit_time == pytest.approx(0.1)
+    torch.testing.assert_close(caught.value.completed_times, times[:2])
 
 
 @pytest.mark.parametrize("degree, power", [(1, 1), (2, 2)])

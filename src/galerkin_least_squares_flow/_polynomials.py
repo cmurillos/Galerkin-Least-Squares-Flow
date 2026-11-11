@@ -33,7 +33,9 @@ class _BallPolynomials:
         if self.degree == 1:
             return torch.cat((constant, linear), dim=-1)
 
-        mixed = self._mixed_scale * states[..., self._pairs[0]] * states[..., self._pairs[1]]
+        mixed = (self._mixed_scale * states).index_select(-1, self._pairs[0]) * states.index_select(
+            -1, self._pairs[1]
+        )
         squares = states.square()
         # The diagonal quadratics split into trace-free contrasts and a radial term.
         contrasts = self._contrast_scale * (
@@ -41,3 +43,23 @@ class _BallPolynomials:
         )
         radial = self._radial_scale * (squares.sum(dim=-1, keepdim=True) - self._radial_center)
         return torch.cat((constant, linear, mixed, contrasts, radial), dim=-1)
+
+    def monomial_coefficients(self, coefficients):
+        """Convert fitted coefficients once, preserving the polynomial in unit coordinates."""
+        bias = coefficients[0]
+        linear = self._linear_scale * coefficients[1 : self.dimension + 1]
+        if self.degree == 1:
+            return bias.contiguous(), linear.T.contiguous()
+
+        mixed_end = self.dimension + 1 + self._pairs.shape[-1]
+        mixed = self._mixed_scale * coefficients[self.dimension + 1 : mixed_end]
+        contrast = self._contrast_scale[:, None] * coefficients[mixed_end:-1]
+        radial = self._radial_scale * coefficients[-1]
+        zero = torch.zeros_like(bias)[None]
+        diagonal = (
+            radial
+            + torch.cat((contrast.flip(0).cumsum(0).flip(0), zero))
+            - torch.cat((zero, self._square_index[:, None] * contrast))
+        )
+        bias = bias - self._radial_center * radial
+        return bias.contiguous(), torch.cat((linear, mixed, diagonal)).T.contiguous()

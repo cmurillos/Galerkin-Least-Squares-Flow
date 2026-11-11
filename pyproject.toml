@@ -28,8 +28,9 @@ classifiers = [
   "Topic :: Scientific/Engineering :: Mathematics",
 ]
 dependencies = [
+  "scipy>=1.12,<2",
   "torch>=2.4,<3",
-  "numerical-galerkin-field @ git+https://github.com/cmurillos/Numerical-Galerkin-Field.git@116532651d7e4801a424834af80a6597e1dd73aa",
+  "numerical-galerkin-field @ git+https://github.com/cmurillos/Numerical-Galerkin-Field.git@9bc9fc5cd05fd6d61659d2abe0ad8c1ef7c08936",
 ]
 
 [project.optional-dependencies]
